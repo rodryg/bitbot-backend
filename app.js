@@ -5,6 +5,13 @@ const app = express();
 const port = 80;
 const winston = require('winston');
 const getIP = require('external-ip')();
+const { saveData } = require('./model');
+const apiRoutes = require('./src/api');
+const bodyParser = require('body-parser');
+
+app.use(bodyParser.json());  // para analizar solicitudes con cuerpos en formato JSON
+
+app.use('/', apiRoutes);
 
 const logger = winston.createLogger({
   transports: [
@@ -42,7 +49,6 @@ app.get('/', async (req, res) => {
     logger.info(serverIP);
   });
 
-
   try {
     // Obtiene la información de la cuenta
     const info = await client.accountInfo();
@@ -58,6 +64,17 @@ app.get('/', async (req, res) => {
 
   // Enviar la variable 'time', 'balance', 'errorLog', 'serverIP' y las variables de entorno en formato UTC
   res.send(`¡Bitbot! Hora actual en UTC: ${time}\nBalance:\n${balance}\nErrores:\n${errorLog}\nIP del servidor: ${serverIP}`);
+});
+
+app.post('/data', async (req, res) => {
+  const { key, secret, date, operationId, number } = req.body;
+  try {
+    await saveData(key, secret, date, operationId, number);
+    res.status(200).json({ message: 'Data saved successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred while saving data' });
+  }
 });
 
 app.listen(port, () => {
