@@ -2,19 +2,51 @@ const mongoose = require('mongoose');
 
 const Schema = mongoose.Schema;
 
-const dataSchema = new Schema({
-  key: String,
-  secret: String,
-  date: Date,
-  operationId: String,
-  number: Number
+mongoose.connect('mongodb+srv://rodryg:zyccAbkaPlUurxPt@cluster.51if8qn.mongodb.net/bitbot?retryWrites=true&w=majority');
+
+const db = mongoose.connection;
+
+db.on('error', console.error.bind(console, 'MongoDB connection error:'));
+db.once('open', function() {
+  console.log('Connected to MongoDB Atlas');
 });
 
-const Data = mongoose.model('Data', dataSchema);
+const dataSchema = new Schema({
+  orderListId: { type: String, unique: true },
+  apiKey: String,
+  apiSecret: String,
+  date: Date,
+  operation: Object,
+  time: Number,
+  schedule: Object
+});
 
-async function saveData(key, secret, date, operationId, number) {
-  const data = new Data({ key, secret, date, operationId, number });
+const Data = mongoose.model('order', dataSchema);
+
+async function saveData(orderListId, apiKey, apiSecret, date, operation, time, schedule) {
+  const data = new Data({ orderListId, apiKey, apiSecret, date, operation, time, schedule });
   await data.save();
 }
 
-module.exports = { saveData };
+async function deleteData(orderListId) {
+  const data = await Data.findOneAndDelete({ orderListId });
+  if (!data) {
+    throw new Error('Data not found');
+  }
+  return data;
+}
+
+async function getData(orderListId) {
+  const data = await Data.findOne({ orderListId });
+  if (!data) {
+    throw new Error('Data not found');
+  }
+  return data;
+}
+
+async function getAllData() {
+  const orders = await Data.find();
+  return orders;
+}
+
+module.exports = { saveData, deleteData, getData, getAllData };

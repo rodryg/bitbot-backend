@@ -1,9 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Binance = require('binance-api-node').default;
-
-const api = require('./api.js');
-const e = require('express');
+const model = require('../model.js');
 
 // Configurar la API de Binance
 const apiKey = process.env.API_KEY;
@@ -23,44 +21,33 @@ router.post('/balance', async (req, res) => {
     // Obtener el balance del usuario
     const balance = await client.accountInfo()
     const assets = balance.balances.filter(asset => parseFloat(asset.free) > 0 || parseFloat(asset.locked) > 0)
-    // Obtener el precio actual del dólar
-    //const dollarPrice = 0 //await client.futuresPrices({ symbol: 'USDTUSDT' })
     // Calcular el balance total en dólares
     let totalBalance = 0
-    //console.log('assets', assets )
     for (let asset of assets) {
-      //coins.map(async (coin) => {
-        //if(asset.asset == coin) {
-          // Obtener el precio del activo en USDT
-          //console.log('asset.asset', asset.asset)
-          try {
-            let assetBalance = 0
-            console.log(asset)
-            if(asset.asset != 'USDT') {
-              const assetPrice = await client.prices({ symbol: asset.asset + 'USDT' })
-              
-              //console.log('assetPrice', assetPrice[asset.asset + 'USDT'])
-              // Convertir el balance del activo en USDT
-              assetBalance = parseFloat(asset.free) + parseFloat(asset.locked) * parseFloat(assetPrice[asset.asset + 'USDT'])
-              // Sumar al balance total en dólares
-            } else {
-              assetBalance = parseFloat(asset.free) + parseFloat(asset.locked)
-            }
-            const price = asset.asset != 'USDT' ? await client.avgPrice({ symbol: asset.asset + 'USDT' }) : { price: 1 }
-            totalBalance += assetBalance * price.price //* parseFloat(dollarPrice.price)
-          } catch (error) {
-            //console.log(error)
-          }
-       // }
-      //})
+      try {
+        let assetBalance = 0
+        if(asset.asset != 'USDT') {
+          const assetPrice = await client.prices({ symbol: asset.asset + 'USDT' })
+          // Convertir el balance del activo en USDT
+          assetBalance = parseFloat(asset.free) + parseFloat(asset.locked) * parseFloat(assetPrice[asset.asset + 'USDT'])
+        } else {
+          assetBalance = parseFloat(asset.free) + parseFloat(asset.locked)
+        }
+        // Sumar al balance total en dólares
+        totalBalance += assetBalance
+      } catch (error) {
+        console.log(error)
+      }
     }
     // Mostrar el balance total en la interfaz
+    console.log('#totalBalance', totalBalance);
     res.json(totalBalance);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al obtener el balance' });
   }
 })
+
 
 // Ruta para obtener el balance de una moneda específica
 router.post('/balanceOf', async (req, res) => {
@@ -70,6 +57,7 @@ router.post('/balanceOf', async (req, res) => {
     const balanceOf = await getBalanceOf(session, coin);
 
     // Devolver el balance convertido a USDT
+    console.log('balanceOf,coin', balanceOf, coin);
     res.json(balanceOf);
   } catch (error) {
     console.error(error);
@@ -317,7 +305,13 @@ router.post('/scheduledSale', async (req, res) => {
       stopLimitPrice,
       stopLimitTimeInForce
     });
-    
+
+    const date = new Date();
+
+    const orderListId = orderOcoResponse.orderListId;
+
+    model.saveData(orderListId, apiKey, apiSecret, date, orderOcoResponse, reSaleTime, schedule);
+    console.log('orderOcoResponse', orderOcoResponse, orderListId);
     // Devuelve la respuesta de la orden OCO
     res.json(orderOcoResponse);
   } catch (error) {
@@ -331,8 +325,6 @@ router.post('/scheduledSale', async (req, res) => {
 const getAvailableBalance = async (session, coin) => {
   try {
     const { apiKey, apiSecret } = session;
-
-    console.log('gogogo', apiKey, apiSecret, coin);
 
     let total = 0;
 
@@ -410,4 +402,45 @@ const getBalanceOf = async function(session, coin) {
   }
 }
 
-module.exports = router;
+const getOrderOco = async function(session, orderListId ) {
+  try {
+    const { apiKey, apiSecret } = session;
+
+    console.log('session', session);
+    
+    // Inicializa el cliente de Binance con las claves API y secretas
+    const client = Binance({ apiKey, apiSecret });
+    
+    // Obtener las órdenes OCO del cliente
+    const orderOco = await client.getOrderOco({ orderListId });
+    
+    return orderOco;
+  } catch (error) {
+    console.error(error);
+    throw new Error('Error al obtener las órdenes OCO');
+  }
+};
+
+const cancelOrderOco = async function(session, orderListId ) {
+  try {
+    const { session, orderListId } = req.body;
+    const { apiKey, apiSecret } = session;
+    
+    // Inicializa el cliente de Binance con las claves API y secretas
+    const client = Binance({ apiKey, apiSecret });
+    
+    // Cancelar las órdenes OCO del cliente
+    const cancelOco = await client.cancelOrderOco({ orderListId });
+    
+    res.json(cancelOco);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al cancelar las órdenes OCO' });
+  }
+};
+
+module.exports = {
+  router: router,
+  getOrderOco: getOrderOco,
+  orderOco: orderOco
+};
