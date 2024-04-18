@@ -1,5 +1,6 @@
+// model.js
 const mongoose = require('mongoose');
-
+const argon2 = require('argon2');
 const Schema = mongoose.Schema;
 
 mongoose.connect('mongodb+srv://rodryg:zyccAbkaPlUurxPt@cluster.51if8qn.mongodb.net/bitbot?retryWrites=true&w=majority');
@@ -11,10 +12,24 @@ db.once('open', function() {
   console.log('Connected to MongoDB Atlas');
 });
 
-const dataSchema = new Schema({
-  orderListId: { type: String, unique: true },
+const UserSchema = new Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
   apiKey: String,
   apiSecret: String,
+});
+
+UserSchema.pre('save', async function(next) {
+  if (this.isModified('password')) {
+    this.password = await argon2.hash(this.password);
+  }
+  next();
+});
+
+const User = mongoose.model('User', UserSchema);
+
+const dataSchema = new Schema({
+  orderListId: { type: String, unique: true },
   date: Date,
   operation: Object,
   time: Number,
@@ -23,8 +38,8 @@ const dataSchema = new Schema({
 
 const Data = mongoose.model('order', dataSchema);
 
-async function saveData(orderListId, apiKey, apiSecret, date, operation, time, schedule) {
-  const data = new Data({ orderListId, apiKey, apiSecret, date, operation, time, schedule });
+async function saveData(orderListId, date, operation, time, schedule) {
+  const data = new Data({ orderListId, date, operation, time, schedule });
   await data.save();
 }
 
@@ -49,4 +64,4 @@ async function getAllData() {
   return orders;
 }
 
-module.exports = { saveData, deleteData, getData, getAllData };
+module.exports = { User, saveData, deleteData, getData, getAllData };

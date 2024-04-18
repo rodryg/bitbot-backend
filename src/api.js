@@ -2,12 +2,38 @@ const express = require('express');
 const router = express.Router();
 const Binance = require('binance-api-node').default;
 const model = require('../model.js');
+const { User } = require('../model');
+const argon2 = require('argon2');
 
 // Configurar la API de Binance
 const apiKey = process.env.API_KEY;
 const apiSecret = process.env.API_SECRET;
 
 const client = Binance({ apiKey, apiSecret });
+
+router.post('/register', async (req, res) => {
+  const { username, password, apiKey, apiSecret } = req.body;
+  const hashedPassword = await argon2.hash(password);
+  const user = new User({ username, password: hashedPassword, apiKey, apiSecret });
+  await user.save();
+  req.session.userId = user._id;
+  res.status(200).send('Usuario registrado con éxito');
+});
+
+router.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user || !await argon2.verify(user.password, password)) {
+    return res.status(400).send('Nombre de usuario o contraseña incorrectos');
+  }
+  req.session.userId = user._id;
+  res.status(200).send('Inicio de sesión exitoso');
+});
+
+router.post('/logout', (req, res) => {
+  req.session.destroy();
+  res.status(200).send('Sesión cerrada con éxito');
+});
 
 // Ruta para obtener el balance total del usuario
 router.post('/balance', async (req, res) => {

@@ -11,6 +11,21 @@ const bodyParser = require('body-parser');
 const model = require('./model');
 const axios = require('axios');
 
+const session = require('express-session');
+const MongoDBStore = require('connect-mongodb-session')(session);
+
+const sessionMiddleware = session({
+  secret: 'secretos',
+  resave: false,
+  saveUninitialized: false,
+  store: new MongoDBStore({
+    uri: 'mongodb+srv://rodryg:zyccAbkaPlUurxPt@cluster.51if8qn.mongodb.net/bitbot?retryWrites=true&w=majority',
+    collection: 'sesiones'
+  }),
+});
+
+app.use(sessionMiddleware);
+
 app.use(bodyParser.json());  // para analizar solicitudes con cuerpos en formato JSON
 
 app.use('/', router);
@@ -33,7 +48,7 @@ const client = new Binance({
 });
 
 // Función que se ejecuta cada ciertos segundos
-cron.schedule('*/60 * * * * *', async () => {
+cron.schedule('*/999 * * * * *', async () => {
   time = new Date().toUTCString();
   
   try {
@@ -52,7 +67,7 @@ cron.schedule('*/60 * * * * *', async () => {
           console.log('orderOco', orderOco);
 
           // Verificar si se encontró una orden OCO con el orderListId correspondiente
-          if (orderOco &&  orderOco.listOrderStatus != 'ALL_DONE') {
+          if (orderOco && orderOco.listOrderStatus != 'ALL_DONE') {
             // Hacer algo con la orden OCO encontrada, por ejemplo, imprimir el orderListId
             console.log('Se encontró la orden OCO');
             console.log(orderOco.orderListId);
@@ -68,12 +83,16 @@ cron.schedule('*/60 * * * * *', async () => {
               const schedule = order.schedule;
               const amount = order.operation.orderReports[0].origQty;
 
-              // Llamada a la ruta '/buy'
-              /*const buyResponse = await axios.post('/buy', {
+              console.log('order.operation.orderReports[0].origQty', amount);
+
+              //Llamada a la ruta '/buy'
+              const buyResponse = await axios.post('/buy', {
                 session,
                 coin,
                 amount
-              });*/
+              });
+
+              console.log('buyResponse.data');
           
               const response = await axios.post('/scheduledSale', {
                 session,
@@ -81,7 +100,7 @@ cron.schedule('*/60 * * * * *', async () => {
                 schedule
               });
           
-              console.log(response.data);
+              console.log('response.data');
               //console.log(buyResponse.data);
             } catch (error) {
               console.error(error);
