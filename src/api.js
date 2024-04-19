@@ -16,8 +16,14 @@ router.post('/register', async (req, res) => {
   const hashedPassword = await argon2.hash(password);
   const user = new User({ username, password: hashedPassword, apiKey, apiSecret });
   await user.save();
+  const userOrder = await model.getOrderByUserId(user._id);
   req.session.userId = user._id;
-  res.status(200).send('Usuario registrado con éxito');
+  req.session.userOrder = userOrder || {};
+  res.status(200).json({
+    message: 'Usuario registrado con éxito',
+    userId: req.session.userId,
+    userOrder: req.session.userOrder
+  });
 });
 
 router.post('/login', async (req, res) => {
@@ -26,8 +32,16 @@ router.post('/login', async (req, res) => {
   if (!user || !await argon2.verify(user.password, password)) {
     return res.status(400).send('Nombre de usuario o contraseña incorrectos');
   }
+  
+  const userOrder = await model.getOrderByUserId(user._id);
+
   req.session.userId = user._id;
-  res.status(200).send('Inicio de sesión exitoso');
+  req.session.userOrder = userOrder || {};
+  res.status(200).json({
+    message: 'Inicio de sesión exitoso',
+    userId: req.session.userId,
+    userOrder: req.session.userOrder
+  });
 });
 
 router.post('/logout', (req, res) => {
@@ -299,7 +313,7 @@ async function orderOco(session, params) {
 
 router.post('/scheduledSale', async (req, res) => {
   try {
-    const { session, coin, schedule } = req.body;
+    const { session, coin, schedule, userId } = req.body;
     const { apiKey, apiSecret } = session;
     const { earnAmount, loseAmount, reSaleTime } = schedule;
 
@@ -336,9 +350,9 @@ router.post('/scheduledSale', async (req, res) => {
 
     const orderListId = orderOcoResponse.orderListId;
 
-    model.saveData(orderListId, apiKey, apiSecret, date, orderOcoResponse, reSaleTime, schedule);
+    model.saveData(orderListId, date, orderOcoResponse, reSaleTime, schedule, userId);
     console.log('orderOcoResponse', orderOcoResponse, orderListId);
-    // Devuelve la respuesta de la orden OCO
+    // Devuelve la respuesta de la orden OCO,
     res.json(orderOcoResponse);
   } catch (error) {
     // Manejar el error

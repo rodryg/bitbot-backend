@@ -28,40 +28,46 @@ UserSchema.pre('save', async function(next) {
 
 const User = mongoose.model('User', UserSchema);
 
-const dataSchema = new Schema({
+const orderSchema = new Schema({
   orderListId: { type: String, unique: true },
   date: Date,
   operation: Object,
   time: Number,
-  schedule: Object
+  schedule: Object,
+  userId: Schema.Types.ObjectId
 });
 
-const Data = mongoose.model('order', dataSchema);
+const Order = mongoose.model('order', orderSchema);
 
-async function saveData(orderListId, date, operation, time, schedule) {
-  const data = new Data({ orderListId, date, operation, time, schedule });
+async function saveOrder(orderListId, date, operation, time, schedule, userId) {
+  const data = new Order({ orderListId, date, operation, time, schedule, userId });
   await data.save();
 }
 
-async function deleteData(orderListId) {
-  const data = await Data.findOneAndDelete({ orderListId });
+async function deleteOrder(orderListId) {
+  const data = await Order.findOneAndDelete({ orderListId });
   if (!data) {
-    throw new Error('Data not found');
+    throw new Error('Order not found');
   }
   return data;
 }
 
-async function getData(orderListId) {
-  const data = await Data.findOne({ orderListId });
+async function getOrder(orderListId) {
+  const data = await Order.findOne({ orderListId });
   if (!data) {
-    throw new Error('Data not found');
+    throw new Error('Order not found');
   }
   return data;
 }
 
-async function getAllData() {
-  const orders = await Data.find();
+async function getAllOrders() {
+  const orders = await Order.find();
   return orders;
 }
 
-module.exports = { User, saveData, deleteData, getData, getAllData };
+async function getOrderByUserId(userId) {
+  const data = await Order.findOne({ userId });
+  return data;
+}
+
+module.exports = { User, Order, saveOrder, deleteOrder, getOrder, getAllOrders, getOrderByUserId };

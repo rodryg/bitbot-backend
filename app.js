@@ -53,7 +53,7 @@ cron.schedule('*/999 * * * * *', async () => {
   
   try {
     // Obtener todas las órdenes de la base de datos
-    const orders = await model.getAllData();
+    const orders = await model.getAllOrders();
     if (orders.length > 0) {
       orders.forEach(async (order) => {
         try {
