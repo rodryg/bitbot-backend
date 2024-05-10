@@ -4,6 +4,7 @@ const Binance = require('binance-api-node').default;
 const model = require('../model.js');
 const { User } = require('../model');
 const argon2 = require('argon2');
+const jwt = require('jsonwebtoken');
 
 // Configurar la API de Binance
 const apiKey = process.env.API_KEY;
@@ -11,18 +12,36 @@ const apiSecret = process.env.API_SECRET;
 
 const client = Binance({ apiKey, apiSecret });
 
+// Función para crear un token JWT
+function generateAuthToken(userId) {
+  // El 'secret' debería ser una cadena secreta almacenada de forma segura
+  const secret = process.env.JWT_SECRET;
+  // Crear el token con el ID del usuario y una caducidad (por ejemplo, 24 horas)
+  return jwt.sign({ userId }, secret, { expiresIn: '24h' });
+}
+
 router.post('/register', async (req, res) => {
   const { username, password, apiKey, apiSecret } = req.body;
   const hashedPassword = await argon2.hash(password);
   const user = new User({ username, password: hashedPassword, apiKey, apiSecret });
   await user.save();
   const userOrder = await model.getOrderByUserId(user._id);
+  console.log('!!! req.session');
+  console.log(req.session);
   req.session.userId = user._id;
   req.session.userOrder = userOrder || {};
+  
+  // Generar el token después de registrar al usuario
+  const authToken = generateAuthToken(user._id);
+  
+  // Guardar el token en la sesión si es necesario
+  req.session.authToken = authToken;
+
   res.status(200).json({
     message: 'Usuario registrado con éxito',
     userId: req.session.userId,
-    userOrder: req.session.userOrder
+    userOrder: req.session.userOrder,
+    authToken: req.session.authToken
   });
 });
 

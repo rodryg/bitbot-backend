@@ -18,11 +18,23 @@ const sessionMiddleware = session({
   secret: 'secretos',
   resave: false,
   saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: false, // Solo para desarrollo o si no estás usando HTTPS
+    //sameSite: 'lax' // O 'strict' si quieres una restricción más fuerte
+   },
   store: new MongoDBStore({
     uri: 'mongodb+srv://rodryg:zyccAbkaPlUurxPt@cluster.51if8qn.mongodb.net/bitbot?retryWrites=true&w=majority',
-    collection: 'sesiones'
+    collection: 'sessions'
   }),
 });
+
+const cors = require('cors');
+
+app.use(cors({
+  origin: 'http://localhost:3000', // Reemplaza con el dominio de tu cliente Next.js
+  credentials: true
+}));
 
 app.use(sessionMiddleware);
 
