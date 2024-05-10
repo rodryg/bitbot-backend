@@ -183,17 +183,43 @@ router.post('/buy', async (req, res) => {
   try {
     const { session, coin, amount } = req.body;
     const { apiKey, apiSecret } = session;
+    const symbol = coin + 'USDT';
 
     // Inicializa el cliente de Binance con las claves API y secretas
     const client = Binance({ apiKey, apiSecret });
 
+    // Obtener el valor mínimo del filtro NOTIONAL para el símbolo
+    const exchangeInfo = await client.exchangeInfo();
+    const symbolInfo = exchangeInfo.symbols.find(s => s.symbol === symbol);
+    const notionFilter = symbolInfo.filters.find(f => f.filterType === 'NOTIONAL');
+    console.log("notionFilter");
+    console.log(notionFilter);
+    console.log("notionFilter");
+    const minNotional = parseFloat(notionFilter.minNotional);
+
+    // Consultar el precio actual del símbolo
+    const ticker = await client.prices({ symbol });
+    const price = parseFloat(ticker[symbol]);
+
+    // Calcular el valor notional de la orden
+    const valorNotional = price * parseFloat(amount);
+
+    // Verificar si cumple con el filtro NOTIONAL
+    console.log("valorNotional < minNotional");
+    console.log(valorNotional < minNotional);
+    console.log(valorNotional, minNotional);
+    
+    if (valorNotional < minNotional) {
+      return res.status(400).json({ error: 'La orden no cumple con el filtro NOTIONAL' });
+    }
+
     // Comprar una moneda
     const order = await client.order({
-      symbol: coin + 'USDT',
+      symbol: symbol,
       side: 'BUY',
       quantity: amount,
       type: 'MARKET'
-    })
+    });
 
     res.json(order);
   } catch (error) {
