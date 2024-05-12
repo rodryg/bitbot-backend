@@ -210,7 +210,7 @@ router.post('/buy', async (req, res) => {
     console.log(valorNotional, minNotional);
     
     if (valorNotional < minNotional) {
-      return res.status(400).json({ error: 'La orden no cumple con el filtro NOTIONAL' });
+      return res.status(422).json({ error: 'La orden no cumple con el filtro NOTIONAL' });
     }
 
     // Comprar una moneda
