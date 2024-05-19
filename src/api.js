@@ -210,7 +210,7 @@ router.post('/buy', async (req, res) => {
     console.log(valorNotional, minNotional);
     
     if (valorNotional < minNotional) {
-      return res.status(422).json({ error: 'La orden no cumple con el filtro NOTIONAL' });
+      return res.status(422).json({ error: 'La orden no cumple con el filtro NOTIONAL.', minNotional: minNotional });
     }
 
     // Comprar una moneda
@@ -246,7 +246,7 @@ router.post('/sell', async (req, res) => {
     res.json(order);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Error al realizar la venta' });
+    res.status(422).json({ error: 'Error al realizar la venta' });
   }
 });
 
@@ -336,6 +336,16 @@ async function orderOco(session, params) {
     // Obtén los parámetros necesarios de la solicitud
     const { symbol, side, quantity, price, stopPrice, stopLimitPrice, stopLimitTimeInForce } = params;
 
+    const exchangeInfo = await client.exchangeInfo();
+    const symbolInfo = exchangeInfo.symbols.find(s => s.symbol === symbol);
+    const lotSizeFilter = symbolInfo.filters.find(f => f.filterType === 'LOT_SIZE');
+
+    console.log('lotSizeFilter', lotSizeFilter);
+    // Validar la cantidad mínima
+    if (quantity < parseFloat(lotSizeFilter.minQty)) {
+      console.log('menos que mínima');
+    }
+
     // Realiza la orden OCO utilizando la API de Binance
     const orderOco = await client.orderOco({
       symbol,
@@ -350,7 +360,7 @@ async function orderOco(session, params) {
     // Devuelve la respuesta de la orden OCO
     return orderOco;
   } catch (error) {
-    console.log('horror', error);
+    console.log('error', error);
     // Maneja cualquier error que ocurra durante la orden OCO
     throw new Error('Error al realizar la orden OCO');
   }
@@ -395,7 +405,7 @@ router.post('/scheduledSale', async (req, res) => {
 
     const orderListId = orderOcoResponse.orderListId;
 
-    model.saveData(orderListId, date, orderOcoResponse, reSaleTime, schedule, userId);
+    model.saveOrder(orderListId, date, orderOcoResponse, reSaleTime, schedule, userId);
     console.log('orderOcoResponse', orderOcoResponse, orderListId);
     // Devuelve la respuesta de la orden OCO,
     res.json(orderOcoResponse);
