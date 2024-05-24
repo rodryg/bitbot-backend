@@ -1,5 +1,4 @@
 const express = require('express');
-const cron = require('node-cron');
 const Binance = require('binance-api-node').default;
 const app = express();
 const port = 80;
@@ -9,7 +8,6 @@ const { saveData } = require('./model');
 const { router, getOrderOco, scheduledSale } = require('./src/api');
 const bodyParser = require('body-parser');
 const model = require('./model');
-const axios = require('axios');
 
 const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
@@ -57,75 +55,6 @@ let serverIP = 'serverIP'; // Agregamos una nueva variable para almacenar la IP 
 const client = new Binance({
   apiKey: process.env.BINANCE_API_KEY,
   apiSecret: process.env.BINANCE_API_SECRET
-});
-
-// Función que se ejecuta cada ciertos segundos
-cron.schedule('*/999 * * * * *', async () => {
-  time = new Date().toUTCString();
-  
-  try {
-    // Obtener todas las órdenes de la base de datos
-    const orders = await model.getAllOrders();
-    if (orders.length > 0) {
-      orders.forEach(async (order) => {
-        try {
-          // Obtener el session y el orderListId de alguna manera
-          const session = { apiKey: process.env.BINANCE_API_KEY, apiSecret: process.env.BINANCE_API_SECRET };
-          const orderListId = order.orderListId;
-
-          // Llamar a la función getOrderOco para obtener las órdenes OCO
-          const orderOco = await getOrderOco(session, orderListId);
-
-          console.log('orderOco', orderOco);
-
-          // Verificar si se encontró una orden OCO con el orderListId correspondiente
-          if (orderOco && orderOco.listOrderStatus != 'ALL_DONE') {
-            // Hacer algo con la orden OCO encontrada, por ejemplo, imprimir el orderListId
-            console.log('Se encontró la orden OCO');
-            console.log(orderOco.orderListId);
-          } else {
-            // Si no ecuentra la orden en Binance
-            console.log('No se ecuentra la orden en Binance');
-            try {
-              const session = {
-                apiKey: process.env.BINANCE_API_KEY,
-                apiSecret: process.env.BINANCE_API_SECRET
-              };
-              const coin = order.operation.symbol.substring(0, 3);
-              const schedule = order.schedule;
-              const amount = order.operation.orderReports[0].origQty;
-
-              console.log('order.operation.orderReports[0].origQty', amount);
-
-              //Llamada a la ruta '/buy'
-              const buyResponse = await axios.post('/buy', {
-                session,
-                coin,
-                amount
-              });
-
-              console.log('buyResponse.data');
-          
-              const response = await axios.post('/scheduledSale', {
-                session,
-                coin,
-                schedule
-              });
-          
-              console.log('response.data');
-              //console.log(buyResponse.data);
-            } catch (error) {
-              console.error(error);
-            }
-          }
-        } catch (error) {
-          console.error(error);
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Error al verificar las órdenes en la base de datos:', error);
-  }
 });
 
 app.get('/', async (req, res) => {

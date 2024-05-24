@@ -5,6 +5,11 @@ const model = require('../model.js');
 const { User } = require('../model');
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
+const cron = require('node-cron');
+const axios = require('axios');
+
+// Registro global para almacenar los trabajos de cron
+global.cronJobsRegistry = {};
 
 // Configurar la API de Binance
 const apiKey = process.env.API_KEY;
@@ -28,6 +33,10 @@ router.post('/register', async (req, res) => {
   const userOrder = await model.getOrderByUserId(user._id);
   console.log('!!! req.session');
   console.log(req.session);
+
+  console.log("userOrder");
+  console.log(userOrder);
+
   req.session.userId = user._id;
   req.session.userOrder = userOrder || {};
   
@@ -202,7 +211,7 @@ router.post('/buy', async (req, res) => {
     const price = parseFloat(ticker[symbol]);
 
     // Calcular el valor notional de la orden
-    const valorNotional = price * parseFloat(amount);
+    const valorNotional = price * parseFloat(amount) * .8;
 
     // Verificar si cumple con el filtro NOTIONAL
     console.log("valorNotional < minNotional");
@@ -224,7 +233,7 @@ router.post('/buy', async (req, res) => {
     res.json(order);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Error al realizar la compra' });
+    res.status(422).json({ error: 'Error al realizar la compra' });
   }
 });
 
@@ -340,7 +349,7 @@ async function orderOco(session, params) {
     const symbolInfo = exchangeInfo.symbols.find(s => s.symbol === symbol);
     const lotSizeFilter = symbolInfo.filters.find(f => f.filterType === 'LOT_SIZE');
 
-    console.log('lotSizeFilter', lotSizeFilter);
+    //console.log('lotSizeFilter', lotSizeFilter);
     // Validar la cantidad mínima
     if (quantity < parseFloat(lotSizeFilter.minQty)) {
       console.log('menos que mínima');
@@ -372,10 +381,13 @@ router.post('/scheduledSale', async (req, res) => {
     const { apiKey, apiSecret } = session;
     const { earnAmount, loseAmount, reSaleTime } = schedule;
 
+    const useCron = req.body.useCron ?? true;
+    console.log('useCron', useCron);
+
     const availableBalance = await getAvailableBalance({ apiKey, apiSecret }, coin);
     const coinPrince = await getCoinPrice(coin);
-    console.log('availableBalance', availableBalance);
-    console.log('earnAmount, loseAmount, reSaleTime', earnAmount, loseAmount, reSaleTime);
+    //console.log('availableBalance', availableBalance);
+    //console.log('earnAmount, loseAmount, reSaleTime', earnAmount, loseAmount, reSaleTime);
 
     // Obtén los parámetros necesarios de la solicitud
     const symbol = coin + 'USDT';
@@ -383,7 +395,7 @@ router.post('/scheduledSale', async (req, res) => {
     const price = (coinPrince * ((earnAmount / 100) + 1)).toFixed(2);
     const stopPrice = (coinPrince - (coinPrince * (loseAmount / 100))).toFixed(2);
     const stopLimitPrice = stopPrice
-    const stopLimitTimeInForce = 'GTC';
+    const stopLimitTimeInForce = 'IOC';
 
     // Validar que se hayan proporcionado todos los parámetros necesarios
     /*if (!symbol || !quantity || !price || !stopPrice || !stopLimitPrice || !stopLimitTimeInForce) {
@@ -406,8 +418,18 @@ router.post('/scheduledSale', async (req, res) => {
     const orderListId = orderOcoResponse.orderListId;
 
     model.saveOrder(orderListId, date, orderOcoResponse, reSaleTime, schedule, userId);
-    console.log('orderOcoResponse', orderOcoResponse, orderListId);
-    // Devuelve la respuesta de la orden OCO,
+
+    try {
+      console.log("createCronJob userId", userId);
+      if(useCron) {
+        req.session.userCronJobId = await createCronJob(userId, reSaleTime);
+      }
+    } catch(error) {
+      console.log(error);
+    }
+
+    //console.log('orderOcoResponse', orderOcoResponse, orderListId);
+    // Devuelve la respuesta de la orden OCO
     res.json(orderOcoResponse);
   } catch (error) {
     // Manejar el error
@@ -416,6 +438,13 @@ router.post('/scheduledSale', async (req, res) => {
     res.status(500).json({ error: 'Error al realizar la orden OCO' });
   }
 });
+
+router.post('/cancelScheduledSale', async (req, res) => {
+  const { session, coin, orderListId } = req.body;
+  const cancelOrderOcoResponse = await cancelOrderOco(session, coin, orderListId);
+  stopCronJob(req.session.userCronJobId);
+  res.json(cancelOrderOcoResponse);
+})
 
 const getAvailableBalance = async (session, coin) => {
   try {
@@ -430,7 +459,7 @@ const getAvailableBalance = async (session, coin) => {
     const balance = await client.accountInfo();
     // Buscar el activo que corresponde a la moneda
     const asset = balance.balances.find((asset) => asset.asset === coin);
-    console.log('//AA', asset);
+    //console.log('//AA', asset);
     // Si no se encuentra el activo, retornar cero
     if (asset) {
       // Si se encuentra el activo, sumar el saldo libre y el saldo bloqueado
@@ -497,11 +526,9 @@ const getBalanceOf = async function(session, coin) {
   }
 }
 
-const getOrderOco = async function(session, orderListId ) {
+const getOrderOco = async function(session, orderListId) {
   try {
     const { apiKey, apiSecret } = session;
-
-    console.log('session', session);
     
     // Inicializa el cliente de Binance con las claves API y secretas
     const client = Binance({ apiKey, apiSecret });
@@ -516,23 +543,139 @@ const getOrderOco = async function(session, orderListId ) {
   }
 };
 
-const cancelOrderOco = async function(session, orderListId ) {
+const cancelOrderOco = async function(session, coin, orderListId) {
   try {
-    const { session, orderListId } = req.body;
     const { apiKey, apiSecret } = session;
+
+    const symbol = coin + 'USDT';
     
     // Inicializa el cliente de Binance con las claves API y secretas
     const client = Binance({ apiKey, apiSecret });
+
+    console.log("orderListId->", orderListId);
     
-    // Cancelar las órdenes OCO del cliente
-    const cancelOco = await client.cancelOrderOco({ orderListId });
-    
-    res.json(cancelOco);
+    let cancelOco = {};
+    try {
+      // Cancelar las órdenes OCO del cliente
+      cancelOco = await client.cancelOrderOco({ symbol, orderListId });
+    } catch {
+      model.deleteOrder(orderListId);
+    }
+
+    //res.json(cancelOco);
+    return cancelOco;
   } catch (error) {
+    //res.status(500).json({ error: '' });
     console.error(error);
-    res.status(500).json({ error: 'Error al cancelar las órdenes OCO' });
+    throw new Error('Error al cancelar las órdenes OCO');
   }
 };
+
+const createCronJob = async function(userId, reSaleTime) {
+  // Función que se ejecuta cada ciertos segundos
+  console.log('function(userId, reSaleTime)');
+  const cronJob = cron.schedule('*/' + reSaleTime + ' * * * * *', async () => {
+    console.log('cron.schedule');
+    time = new Date().toUTCString();
+
+    try {
+      // Obtener todas las órdenes de la base de datos
+      console.log('userId = ', userId);
+      const order = await model.getOrderByUserId(userId);
+      //console.log('orders', orders);
+
+      //console.log('order', order);
+
+      if (order) {
+        try {
+          // Obtener el session y el orderListId
+          const session = { apiKey: process.env.BINANCE_API_KEY, apiSecret: process.env.BINANCE_API_SECRET };
+          const orderListId = order.orderListId;
+
+          // Llamar a la función getOrderOco para obtener las órdenes OCO
+          const orderOco = await getOrderOco(session, orderListId);
+
+          //console.log('orderOco', orderOco);
+          console.log('orderOco.listOrderStatus = ', orderOco.listOrderStatus);
+
+          console.log('orderListId = ', orderListId);
+
+          // Verificar si se encontró una orden OCO con el orderListId correspondiente
+          if (orderOco && orderOco.listOrderStatus != 'ALL_DONE') {
+            // Hacer algo con la orden OCO encontrada, por ejemplo, imprimir el orderListId
+            console.log('Se encontró la orden OCO');
+            console.log(orderOco);
+            console.log(orderOco.orderListId);
+            console.log(orderOco.listOrderStatus);
+            console.log(orderOco.listStatusType);
+          } else {
+            // Si no ecuentra la orden en Binance
+            console.log('No se ecuentra la orden en Binance');
+            try {
+              const session = {
+                apiKey: process.env.BINANCE_API_KEY,
+                apiSecret: process.env.BINANCE_API_SECRET
+              };
+              const coin = order.operation.symbol.substring(0, 3);
+              const schedule = order.schedule;
+              const amount = order.operation.orderReports[0].origQty;
+
+              console.log('order.operation.orderReports[0].origQty', amount);
+              
+              const cancelOco = await cancelOrderOco(session, coin, orderListId);
+              console.log('cancelOco', orderListId);
+
+              try {
+                //Llamada a la ruta '/buy'
+                const buyResponse = await axios.post('/buy', {
+                  session,
+                  coin,
+                  amount
+                });
+              } catch(error) {
+                console.log(error);
+              }
+
+              const useCron = false;
+          
+              const response = await axios.post('/scheduledSale', {
+                session,
+                coin,
+                schedule,
+                useCron,
+                userId
+              });
+          
+              console.log('response.data');
+              //console.log(buyResponse.data);
+            } catch (error) {
+              //console.error(error);
+            }
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    } catch (error) {
+      console.error('Error al crear cron job', error);
+    }
+  });
+  // Genera un identificador único para el cron job
+  const cronJobId = `cronJob-${userId}-${Date.now()}`;
+  // Almacena el cron job en el registro usando el identificador
+  global.cronJobsRegistry[cronJobId] = cronJob;
+  // Devuelve el identificador para almacenarlo en la sesión
+  return cronJobId;
+}
+
+// Función para detener un cron job usando el identificador
+function stopCronJob(cronJobId) {
+  const cronJob = global.cronJobsRegistry[cronJobId];
+  if (cronJob) {
+    cronJob.stop(); // Detiene el cron job
+    delete global.cronJobsRegistry[cronJobId]; // Elimina el cron job del registro
+  }
+}
 
 module.exports = {
   router: router,

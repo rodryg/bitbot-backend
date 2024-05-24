@@ -67,6 +67,7 @@ async function getAllOrders() {
 
 async function getOrderByUserId(userId) {
   const data = await Order.findOne({ userId });
+  //console.log("getOrderByUserId", userId, data);
   return data;
 }
 
