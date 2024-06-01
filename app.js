@@ -2,7 +2,7 @@ const express = require('express');
 const Binance = require('binance-api-node').default;
 const app = express();
 const port = 80;
-const winston = require('winston');
+//const winston = require('winston');
 const getIP = require('external-ip')();
 const { saveData } = require('./model');
 const { router, getOrderOco, scheduledSale } = require('./src/api');
@@ -10,22 +10,44 @@ const bodyParser = require('body-parser');
 const model = require('./model');
 
 const session = require('express-session');
-const MongoDBStore = require('connect-mongodb-session')(session);
+//const MongoDBStore = require('connect-mongodb-session')(session);
+const MongoStore = require('connect-mongo');
 
-const sessionMiddleware = session({
+/* const sessionMiddleware = session({
   secret: 'secretos',
   resave: false,
   saveUninitialized: false,
   cookie: {
+    maxAge: 1000 * 60 * 60 * 24, // Esto establecerá la cookie para expirar en 24 horas
+    httpOnly: true,
+    secure: false // Establecer en 'true' si estás en producción con HTTPS
+  },
+  store: MongoStore.create({
+    mongoUrl: 'mongodb+srv://rodryg:zyccAbkaPlUurxPt@cluster.51if8qn.mongodb.net/bitbot?retryWrites=true&w=majority',
+    collectionName: 'sessions'
+  })
+});
+ */
+/* const sessionMiddleware = session({
+  secret: 'secretos',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    path: '/',
+    maxAge: 1000 * 60 * 60 * 24, // Esto establecerá la cookie para expirar en 24 horas
+    httpOnly: true,
+    secure: false //process.env.NODE_ENV === 'production',
+  },
+ */  /*cookie: {
     httpOnly: true,
     secure: false, // Solo para desarrollo o si no estás usando HTTPS
-    //sameSite: 'lax' // O 'strict' si quieres una restricción más fuerte
-   },
-  store: new MongoDBStore({
+    sameSite: 'lax' // O 'strict' si quieres una restricción más fuerte
+   },*/
+/*   store: new MongoDBStore({
     uri: 'mongodb+srv://rodryg:zyccAbkaPlUurxPt@cluster.51if8qn.mongodb.net/bitbot?retryWrites=true&w=majority',
     collection: 'sessions'
-  }),
-});
+  })
+}); */
 
 const cors = require('cors');
 
@@ -34,18 +56,33 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(sessionMiddleware);
-
 app.use(bodyParser.json());  // para analizar solicitudes con cuerpos en formato JSON
+
+//app.use(sessionMiddleware);
+
+app.use(session({
+  secret: 'secreto',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: 'mongodb+srv://rodryg:zyccAbkaPlUurxPt@cluster.51if8qn.mongodb.net/bitbot?retryWrites=true&w=majority'
+  })
+}));
+
+/* app.use((req, res, next) => {
+  console.log('Session middleware check:', req.session);
+  next();
+}); */
+
 
 app.use('/', router);
 
-const logger = winston.createLogger({
+/* const logger = winston.createLogger({
   transports: [
     new winston.transports.File({ filename: 'output.log' })
   ]
 });
-
+ */
 let time = new Date().toUTCString();
 let balance = 'balance';
 let errorLog = 'errorLog';
@@ -59,7 +96,7 @@ const client = new Binance({
 
 app.get('/', async (req, res) => {
   console.log("binance")
-  logger.info(client);
+  //logger.info(client);
 
   getIP((err, ip) => {
     if (err) {
@@ -67,8 +104,8 @@ app.get('/', async (req, res) => {
         throw err;
     }
     serverIP = ip;
-    logger.info('serverIP');
-    logger.info(serverIP);
+    //logger.info('serverIP');
+    //logger.info(serverIP);
   });
 
   try {

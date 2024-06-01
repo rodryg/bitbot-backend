@@ -3,6 +3,7 @@ const router = express.Router();
 const Binance = require('binance-api-node').default;
 const model = require('../model.js');
 const { User } = require('../model');
+const { getUserCronJobIdByUserId  } = require('../model'); 
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
@@ -11,11 +12,11 @@ const axios = require('axios');
 // Registro global para almacenar los trabajos de cron
 global.cronJobsRegistry = {};
 
-// Configurar la API de Binance
+/* // Configurar la API de Binance
 const apiKey = process.env.API_KEY;
 const apiSecret = process.env.API_SECRET;
-
-const client = Binance({ apiKey, apiSecret });
+ */
+//const client = Binance({ apiKey, apiSecret });
 
 // Función para crear un token JWT
 function generateAuthToken(userId) {
@@ -27,8 +28,13 @@ function generateAuthToken(userId) {
 
 router.post('/register', async (req, res) => {
   const { username, password, apiKey, apiSecret } = req.body;
+  console.log('register password', password);
   const hashedPassword = await argon2.hash(password);
+  console.log('register hashedPassword', hashedPassword);
+  const isHashedPassword = await argon2.verify(hashedPassword, password);
+  console.log('isHashedPassword', isHashedPassword);
   const user = new User({ username, password: hashedPassword, apiKey, apiSecret });
+  console.log('hashedPassword before saving', hashedPassword);
   await user.save();
   const userOrder = await model.getOrderByUserId(user._id);
   console.log('!!! req.session');
@@ -39,6 +45,9 @@ router.post('/register', async (req, res) => {
 
   req.session.userId = user._id;
   req.session.userOrder = userOrder || {};
+
+  req.session.apiKey = apiKey;
+  req.session.apiSecret = apiSecret;
   
   // Generar el token después de registrar al usuario
   const authToken = generateAuthToken(user._id);
@@ -54,12 +63,32 @@ router.post('/register', async (req, res) => {
   });
 });
 
+async function testArgon2() {
+  try {
+    const password = 'rod';
+    const hash = await argon2.hash(password);
+    const isPasswordValid = await argon2.verify(hash, password);
+    console.log('isPasswordValid2', isPasswordValid);
+  } catch (error) {
+    console.error('Error al verificar la contraseña:', error);
+  }
+}
+
+
 router.post('/login', async (req, res) => {
+  testArgon2();
   const { username, password } = req.body;
   const user = await User.findOne({ username });
+  console.log('user', user);
+  console.log('password', password);
+  console.log('user.password', user.password);
+  console.log('pass', await argon2.verify(user.password, password));
   if (!user || !await argon2.verify(user.password, password)) {
-    return res.status(400).send('Nombre de usuario o contraseña incorrectos');
+    return res.status(401).send('Nombre de usuario o contraseña incorrectos');
   }
+
+  req.session.apiKey = user.apiKey;
+  req.session.apiSecret = user.apiSecret;
   
   const userOrder = await model.getOrderByUserId(user._id);
 
@@ -68,7 +97,8 @@ router.post('/login', async (req, res) => {
   res.status(200).json({
     message: 'Inicio de sesión exitoso',
     userId: req.session.userId,
-    userOrder: req.session.userOrder
+    userOrder: req.session.userOrder,
+    authToken: req.session.authToken
   });
 });
 
@@ -80,8 +110,10 @@ router.post('/logout', (req, res) => {
 // Ruta para obtener el balance total del usuario
 router.post('/balance', async (req, res) => {
   try {
-    const { session } = req.body;
-    const { apiKey, apiSecret } = session;
+    //const { session } = req.body;
+    const { apiKey, apiSecret } = req.session;
+
+    console.log('&&&&&&&& apiKey', apiKey)
 
     // Inicializa el cliente de Binance con las claves API y secretas
     const client = Binance({ apiKey, apiSecret });
@@ -122,7 +154,7 @@ router.post('/balanceOf', async (req, res) => {
   try {
     const { session, coin } = req.body;
 
-    const balanceOf = await getBalanceOf(session, coin);
+    const balanceOf = await getBalanceOf(req.session, coin);
 
     // Devolver el balance convertido a USDT
     console.log('balanceOf,coin', balanceOf, coin);
@@ -137,7 +169,7 @@ router.post('/balanceOf', async (req, res) => {
 router.post('/balances', async (req, res) => {
   try {
     const { session } = req.body;
-    const { apiKey, apiSecret } = session;
+    const { apiKey, apiSecret } = req.session;
 
     // Inicializa el cliente de Binance con las claves API y secretas
     const client = Binance({ apiKey, apiSecret });
@@ -175,7 +207,7 @@ router.post('/balances', async (req, res) => {
 router.post('/available', async (req, res) => {
   try {
     const { session, coin } = req.body;
-    const { apiKey, apiSecret } = session;
+    const { apiKey, apiSecret } = req.session;
 
     const availableBalance = await getAvailableBalance({ apiKey, apiSecret }, coin);
     console.log('/available', availableBalance)
@@ -190,8 +222,8 @@ router.post('/available', async (req, res) => {
 // Ruta para comprar una moneda
 router.post('/buy', async (req, res) => {
   try {
-    const { session, coin, amount } = req.body;
-    const { apiKey, apiSecret } = session;
+    const { coin, amount } = req.body;
+    const { apiKey, apiSecret } = req.session;
     const symbol = coin + 'USDT';
 
     // Inicializa el cliente de Binance con las claves API y secretas
@@ -241,7 +273,7 @@ router.post('/buy', async (req, res) => {
 router.post('/sell', async (req, res) => {
   try {
     const { session, coin, amount } = req.body;
-    const { apiKey, apiSecret } = session;
+    const { apiKey, apiSecret } = req.session;
 
     const client = Binance({ apiKey, apiSecret });
 
@@ -263,7 +295,7 @@ router.post('/sell', async (req, res) => {
 router.post('/coins', async (req, res) => {
   try {
     //const { session } = req.body;
-    //const { apiKey, apiSecret } = session;
+    //const { apiKey, apiSecret } = req.session;
 
     const client = Binance();
 
@@ -378,7 +410,7 @@ async function orderOco(session, params) {
 router.post('/scheduledSale', async (req, res) => {
   try {
     const { session, coin, schedule, userId } = req.body;
-    const { apiKey, apiSecret } = session;
+    const { apiKey, apiSecret } = req.session;
     const { earnAmount, loseAmount, reSaleTime } = schedule;
 
     const useCron = req.body.useCron ?? true;
@@ -403,7 +435,7 @@ router.post('/scheduledSale', async (req, res) => {
     }*/
 
     // Llamada a orderOco con los parámetros necesarios
-    const orderOcoResponse = await orderOco(session, {
+    const orderOcoResponse = await orderOco(req.session, {
       symbol,
       side:'SELL',
       quantity,
@@ -419,10 +451,27 @@ router.post('/scheduledSale', async (req, res) => {
 
     model.saveOrder(orderListId, date, orderOcoResponse, reSaleTime, schedule, userId);
 
+    // Acceder al encabezado 'cookie'
+    const cookies = req.headers.cookie;
+
+    // Dividir el string de cookies para obtener cada una individualmente
+    const cookiesArray = cookies.split('; ');
+
+    // Buscar la cookie 'connect.sid' y extraer su valor
+    const sessionCookie = cookiesArray.find(cookie => cookie.startsWith('connect.sid='));
+
     try {
       console.log("createCronJob userId", userId);
       if(useCron) {
-        req.session.userCronJobId = await createCronJob(userId, reSaleTime);
+        req.session.userCronJobId = await createCronJob(sessionCookie, req.session, userId, reSaleTime);
+        /* req.session.save(err => {
+          if(err) {
+            console.error('Error al guardar la sesión:', err);
+          } else {
+            console.log('Sesión guardada con éxito');
+          }
+        }); */
+        console.log(req.session.userCronJobId);
       }
     } catch(error) {
       console.log(error);
@@ -440,10 +489,18 @@ router.post('/scheduledSale', async (req, res) => {
 });
 
 router.post('/cancelScheduledSale', async (req, res) => {
-  const { session, coin, orderListId } = req.body;
-  const cancelOrderOcoResponse = await cancelOrderOco(session, coin, orderListId);
-  stopCronJob(req.session.userCronJobId);
-  res.json(cancelOrderOcoResponse);
+  const { coin, orderListId, userId } = req.body;
+
+  const order = await model.getOrderByUserId(userId);
+  console.log('order', order, userId);
+
+  if(order) {
+    const orderListId = order.orderListId;
+    console.log("const orderListId = order.orderListId;", orderListId);
+    const cancelOrderOcoResponse = await cancelOrderOco(req.session, coin, orderListId);
+    stopCronJob(req.session.userCronJobId);
+    res.json(cancelOrderOcoResponse);
+  }
 })
 
 const getAvailableBalance = async (session, coin) => {
@@ -478,6 +535,8 @@ const getAvailableBalance = async (session, coin) => {
 
 const getCoinPrice = async function(coin) {
   try {
+    // Inicializa el cliente de Binance
+    const client = Binance();
     // Obtener el valor y los datos de una moneda específica
     let price = 0
     if(coin != 'USDT') {
@@ -571,12 +630,14 @@ const cancelOrderOco = async function(session, coin, orderListId) {
   }
 };
 
-const createCronJob = async function(userId, reSaleTime) {
+const createCronJob = async function(sessionCookie, session, userId, reSaleTime) {
   // Función que se ejecuta cada ciertos segundos
   console.log('function(userId, reSaleTime)');
   const cronJob = cron.schedule('*/' + reSaleTime + ' * * * * *', async () => {
     console.log('cron.schedule');
     time = new Date().toUTCString();
+
+    //console.log('global.cronJobsRegistry', global.cronJobsRegistry);
 
     try {
       // Obtener todas las órdenes de la base de datos
@@ -589,7 +650,6 @@ const createCronJob = async function(userId, reSaleTime) {
       if (order) {
         try {
           // Obtener el session y el orderListId
-          const session = { apiKey: process.env.BINANCE_API_KEY, apiSecret: process.env.BINANCE_API_SECRET };
           const orderListId = order.orderListId;
 
           // Llamar a la función getOrderOco para obtener las órdenes OCO
@@ -624,11 +684,19 @@ const createCronJob = async function(userId, reSaleTime) {
               
               const cancelOco = await cancelOrderOco(session, coin, orderListId);
               console.log('cancelOco', orderListId);
+              
+              const api = axios.create({
+                // Configura Axios para enviar cookies con cada solicitud
+                baseURL: 'http://localhost',
+                headers: {
+                  'Cookie': sessionCookie // Asegúrate de enviar la cookie de sesión
+                },
+                withCredentials: true
+              });
 
               try {
                 //Llamada a la ruta '/buy'
-                const buyResponse = await axios.post('/buy', {
-                  session,
+                const buyResponse = await api.post('/buy', {
                   coin,
                   amount
                 });
@@ -638,8 +706,7 @@ const createCronJob = async function(userId, reSaleTime) {
 
               const useCron = false;
           
-              const response = await axios.post('/scheduledSale', {
-                session,
+              const response = await api.post('/scheduledSale', {
                 coin,
                 schedule,
                 useCron,
@@ -664,6 +731,7 @@ const createCronJob = async function(userId, reSaleTime) {
   const cronJobId = `cronJob-${userId}-${Date.now()}`;
   // Almacena el cron job en el registro usando el identificador
   global.cronJobsRegistry[cronJobId] = cronJob;
+  console.log("global.cronJobsRegistry[cronJobId]", cronJobId);
   // Devuelve el identificador para almacenarlo en la sesión
   return cronJobId;
 }
@@ -675,6 +743,10 @@ function stopCronJob(cronJobId) {
     cronJob.stop(); // Detiene el cron job
     delete global.cronJobsRegistry[cronJobId]; // Elimina el cron job del registro
   }
+}
+
+function cutText(texto) {
+  return texto.length > 80 ? texto.substring(0, maxCaracteres) + '...' : texto;
 }
 
 module.exports = {
