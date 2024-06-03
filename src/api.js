@@ -672,10 +672,6 @@ const createCronJob = async function(sessionCookie, session, userId, reSaleTime)
             // Si no ecuentra la orden en Binance
             console.log('No se ecuentra la orden en Binance');
             try {
-              const session = {
-                apiKey: process.env.BINANCE_API_KEY,
-                apiSecret: process.env.BINANCE_API_SECRET
-              };
               const coin = order.operation.symbol.substring(0, 3);
               const schedule = order.schedule;
               const amount = order.operation.orderReports[0].origQty;

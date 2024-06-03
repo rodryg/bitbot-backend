@@ -89,10 +89,10 @@ let errorLog = 'errorLog';
 let serverIP = 'serverIP'; // Agregamos una nueva variable para almacenar la IP del servidor
 
 // Configura tu cliente de Binance
-const client = new Binance({
+/* const client = new Binance({
   apiKey: process.env.BINANCE_API_KEY,
   apiSecret: process.env.BINANCE_API_SECRET
-});
+}); */
 
 app.get('/', async (req, res) => {
   console.log("binance")
@@ -110,11 +110,11 @@ app.get('/', async (req, res) => {
 
   try {
     // Obtiene la información de la cuenta
-    const info = await client.accountInfo();
-    balance = info.balances.reduce((total, { asset, free, locked }) => {
+    //const info = await client.accountInfo();
+    /* balance = info.balances.reduce((total, { asset, free, locked }) => {
       total += `Asset: ${asset}, Available: ${free}, In order: ${locked}\n`;
       return total;
-    }, '');
+    }, ''); */
   } catch (error) {
     console.error(error);
     logger.error(error.toString());
