@@ -20,7 +20,6 @@ const apiSecret = process.env.API_SECRET;
 
 // Función para crear un token JWT
 function generateAuthToken(userId) {
-  // El 'secret' debería ser una cadena secreta almacenada de forma segura
   const secret = process.env.JWT_SECRET;
   // Crear el token con el ID del usuario y una caducidad (por ejemplo, 24 horas)
   return jwt.sign({ userId }, secret, { expiresIn: '24h' });
@@ -294,9 +293,6 @@ router.post('/sell', async (req, res) => {
 // Ruta para obtener la lista de monedas disponibles
 router.post('/coins', async (req, res) => {
   try {
-    //const { session } = req.body;
-    //const { apiKey, apiSecret } = req.session;
-
     const client = Binance();
 
     // Definir las monedas que quieres consultar
@@ -381,7 +377,6 @@ async function orderOco(session, params) {
     const symbolInfo = exchangeInfo.symbols.find(s => s.symbol === symbol);
     const lotSizeFilter = symbolInfo.filters.find(f => f.filterType === 'LOT_SIZE');
 
-    //console.log('lotSizeFilter', lotSizeFilter);
     // Validar la cantidad mínima
     if (quantity < parseFloat(lotSizeFilter.minQty)) {
       console.log('menos que mínima');

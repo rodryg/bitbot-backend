@@ -1,7 +1,7 @@
 const express = require('express');
 const Binance = require('binance-api-node').default;
 const app = express();
-const port = 80;
+const port = process.env.PORT;
 //const winston = require('winston');
 const getIP = require('external-ip')();
 const { saveData } = require('./model');
@@ -52,7 +52,7 @@ const MongoStore = require('connect-mongo');
 const cors = require('cors');
 
 app.use(cors({
-  origin: 'http://localhost:3000', // Reemplaza con el dominio de tu cliente Next.js
+  origin: process.env.CORS_ORIGIN, // Reemplaza con el dominio de tu cliente Next.js
   credentials: true
 }));
 
@@ -74,25 +74,18 @@ app.use(session({
   next();
 }); */
 
-
 app.use('/', router);
 
 /* const logger = winston.createLogger({
   transports: [
     new winston.transports.File({ filename: 'output.log' })
   ]
-});
- */
+});*/
+
 let time = new Date().toUTCString();
 let balance = 'balance';
 let errorLog = 'errorLog';
 let serverIP = 'serverIP'; // Agregamos una nueva variable para almacenar la IP del servidor
-
-// Configura tu cliente de Binance
-/* const client = new Binance({
-  apiKey: process.env.BINANCE_API_KEY,
-  apiSecret: process.env.BINANCE_API_SECRET
-}); */
 
 app.get('/', async (req, res) => {
   console.log("binance")
