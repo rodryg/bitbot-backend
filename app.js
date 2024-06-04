@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const Binance = require('binance-api-node').default;
 const app = express();
@@ -61,7 +62,7 @@ app.use(bodyParser.json());  // para analizar solicitudes con cuerpos en formato
 //app.use(sessionMiddleware);
 
 app.use(session({
-  secret: 'secreto',
+  secret: process.env.SECRET,
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
