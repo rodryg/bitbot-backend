@@ -62,7 +62,7 @@ router.post('/register', async (req, res) => {
   });
 });
 
-async function testArgon2() {
+/* async function testArgon2() {
   try {
     const password = 'rod';
     const hash = await argon2.hash(password);
@@ -72,16 +72,12 @@ async function testArgon2() {
     console.error('Error al verificar la contraseña:', error);
   }
 }
-
+ */
 
 router.post('/login', async (req, res) => {
-  testArgon2();
+  //testArgon2();
   const { username, password } = req.body;
   const user = await User.findOne({ username });
-  console.log('user', user);
-  console.log('password', password);
-  console.log('user.password', user.password);
-  console.log('pass', await argon2.verify(user.password, password));
   if (!user || !await argon2.verify(user.password, password)) {
     return res.status(401).send('Nombre de usuario o contraseña incorrectos');
   }
@@ -90,6 +86,8 @@ router.post('/login', async (req, res) => {
   req.session.apiSecret = user.apiSecret;
   
   const userOrder = await model.getOrderByUserId(user._id);
+
+  console.log('userOrder', userOrder);
 
   req.session.userId = user._id;
   req.session.userOrder = userOrder || {};
@@ -111,8 +109,6 @@ router.post('/balance', async (req, res) => {
   try {
     //const { session } = req.body;
     const { apiKey, apiSecret } = req.session;
-
-    console.log('&&&&&&&& apiKey', apiKey)
 
     // Inicializa el cliente de Binance con las claves API y secretas
     const client = Binance({ apiKey, apiSecret });
@@ -151,7 +147,7 @@ router.post('/balance', async (req, res) => {
 // Ruta para obtener el balance de una moneda específica
 router.post('/balanceOf', async (req, res) => {
   try {
-    const { session, coin } = req.body;
+    const { coin } = req.body;
 
     const balanceOf = await getBalanceOf(req.session, coin);
 
@@ -167,7 +163,6 @@ router.post('/balanceOf', async (req, res) => {
 // Ruta para obtener el balance total del usuario
 router.post('/balances', async (req, res) => {
   try {
-    const { session } = req.body;
     const { apiKey, apiSecret } = req.session;
 
     // Inicializa el cliente de Binance con las claves API y secretas
@@ -612,8 +607,9 @@ const cancelOrderOco = async function(session, coin, orderListId) {
     try {
       // Cancelar las órdenes OCO del cliente
       cancelOco = await client.cancelOrderOco({ symbol, orderListId });
-    } catch {
       model.deleteOrder(orderListId);
+    } catch (error) {
+      console.error(error);
     }
 
     //res.json(cancelOco);
