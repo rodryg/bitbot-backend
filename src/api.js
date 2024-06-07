@@ -124,7 +124,8 @@ router.post('/balance', async (req, res) => {
         if(asset.asset != 'USDT') {
           const assetPrice = await client.prices({ symbol: asset.asset + 'USDT' })
           // Convertir el balance del activo en USDT
-          assetBalance = parseFloat(asset.free) + parseFloat(asset.locked) * parseFloat(assetPrice[asset.asset + 'USDT'])
+          //assetBalance = parseFloat(asset.free) + parseFloat(asset.locked) * parseFloat(assetPrice[asset.asset + 'USDT'])
+          assetBalance = (parseFloat(asset.free) + parseFloat(asset.locked)) * parseFloat(assetPrice[asset.asset + 'USDT'])
         } else {
           assetBalance = parseFloat(asset.free) + parseFloat(asset.locked)
         }
