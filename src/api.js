@@ -228,9 +228,7 @@ router.post('/buy', async (req, res) => {
     const exchangeInfo = await client.exchangeInfo();
     const symbolInfo = exchangeInfo.symbols.find(s => s.symbol === symbol);
     const notionFilter = symbolInfo.filters.find(f => f.filterType === 'NOTIONAL');
-    console.log("notionFilter");
-    console.log(notionFilter);
-    console.log("notionFilter");
+    console.log('notionFilter.minNotional', notionFilter.minNotional);
     const minNotional = parseFloat(notionFilter.minNotional);
 
     // Consultar el precio actual del símbolo
@@ -241,9 +239,8 @@ router.post('/buy', async (req, res) => {
     const valorNotional = price * parseFloat(amount) * .8;
 
     // Verificar si cumple con el filtro NOTIONAL
-    console.log("valorNotional < minNotional");
-    console.log(valorNotional < minNotional);
-    console.log(valorNotional, minNotional);
+    console.log('valorNotional < minNotional', valorNotional < minNotional);
+    console.log('valorNotional, minNotional', valorNotional, minNotional);
     
     if (valorNotional < minNotional) {
       return res.status(422).json({ error: 'La orden no cumple con el filtro NOTIONAL.', minNotional: minNotional });
@@ -259,7 +256,7 @@ router.post('/buy', async (req, res) => {
 
     res.json(order);
   } catch (error) {
-    console.error(error);
+    console.error((error + '').split("code: '")[0]);
     res.status(422).json({ error: 'Error al realizar la compra' });
   }
 });
@@ -378,6 +375,8 @@ async function orderOco(session, params) {
       console.log('menos que mínima');
     }
 
+
+
     // Realiza la orden OCO utilizando la API de Binance
     const orderOco = await client.orderOco({
       symbol,
@@ -392,7 +391,7 @@ async function orderOco(session, params) {
     // Devuelve la respuesta de la orden OCO
     return orderOco;
   } catch (error) {
-    console.log('error', error);
+    console.log('error', (error + '').split("code: '")[0]);
     // Maneja cualquier error que ocurra durante la orden OCO
     throw new Error('Error al realizar la orden OCO');
   }
@@ -414,7 +413,9 @@ router.post('/scheduledSale', async (req, res) => {
 
     // Obtén los parámetros necesarios de la solicitud
     const symbol = coin + 'USDT';
-    const quantity = (availableBalance * .95).toFixed(5);
+
+    console.log('availableBalance, coin', availableBalance, coin);
+    const quantity = (availableBalance * .97).toFixed(5);
     const price = (coinPrince * ((earnAmount / 100) + 1)).toFixed(2);
     const stopPrice = (coinPrince - (coinPrince * (loseAmount / 100))).toFixed(2);
     const stopLimitPrice = stopPrice
@@ -425,8 +426,7 @@ router.post('/scheduledSale', async (req, res) => {
       return res.status(400).json({ error: 'Faltan parámetros requeridos' });
     }*/
 
-    // Llamada a orderOco con los parámetros necesarios
-    const orderOcoResponse = await orderOco(req.session, {
+    const orderOcoObj = {
       symbol,
       side:'SELL',
       quantity,
@@ -434,7 +434,12 @@ router.post('/scheduledSale', async (req, res) => {
       stopPrice,
       stopLimitPrice,
       stopLimitTimeInForce
-    });
+    };
+
+    console.log('orderOcoObj', orderOcoObj.quantity);
+
+    // Llamada a orderOco con los parámetros necesarios
+    const orderOcoResponse = await orderOco(req.session, orderOcoObj);
 
     const date = new Date();
 
@@ -465,6 +470,7 @@ router.post('/scheduledSale', async (req, res) => {
         console.log(req.session.userCronJobId);
       }
     } catch(error) {
+      console.log((error + '').split("code: '")[0]);
       console.log(error);
     }
 
@@ -666,16 +672,33 @@ const createCronJob = async function(sessionCookie, session, userId, reSaleTime)
             try {
               const coin = order.operation.symbol.substring(0, 3);
               const schedule = order.schedule;
-              const amount = order.operation.orderReports[0].origQty;
-
+              
+              //const amount = order.operation.orderReports[0].origQty; // No la cant original
+              const availableBalance = await getAvailableBalance(session, 'USDT');
+              const coinPrince = await getCoinPrice(coin);
+              
+              console.log('availableBalance No', availableBalance);
+              const quantity = (availableBalance * .97);
+              console.log('quantity', quantity);
+              const amount = (quantity / coinPrince).toFixed(5);
+              console.log('amount', amount);
               console.log('order.operation.orderReports[0].origQty', amount);
               
-              const cancelOco = await cancelOrderOco(session, coin, orderListId);
-              console.log('cancelOco', orderListId);
+              let cancelOco;
+              try {
+                //cancelOco = await cancelOrderOco(session, coin, orderListId);
+                cancelOco = model.deleteOrder(orderListId);
+              } catch(error) {
+                console.log(error);
+                //console.log((error + '').split("code: '")[0]);
+              }
+
+              console.log('orderListId', orderListId);
+              console.log('cancelOco', cancelOco);
               
               const api = axios.create({
                 // Configura Axios para enviar cookies con cada solicitud
-                baseURL: 'http://localhost',
+                baseURL: '/',
                 headers: {
                   'Cookie': sessionCookie // Asegúrate de enviar la cookie de sesión
                 },
@@ -684,12 +707,15 @@ const createCronJob = async function(sessionCookie, session, userId, reSaleTime)
 
               try {
                 //Llamada a la ruta '/buy'
+
+                console.log('Volver a comprar buy', coin, amount);
                 const buyResponse = await api.post('/buy', {
                   coin,
                   amount
                 });
+                console.log('buyResponse', buyResponse.status);
               } catch(error) {
-                console.log(error);
+                console.log((error + '').split("code: '")[0]);
               }
 
               const useCron = false;
